@@ -1,0 +1,393 @@
+---
+title: "snATAC-seq loading and per-donor setup"
+output: html_document
+---
+
+## Load Libraries
+
+```{r setup, message=FALSE, warning=FALSE}
+library(Signac)
+library(Seurat)
+library(Matrix)
+library(GenomicRanges)
+library(GenomeInfoDb)
+library(rtracklayer)
+library(ggplot2)
+library(patchwork)
+
+```
+
+## Read all donors
+### early donor 1:
+```{r}
+
+e1counts <- Read10X_h5(filename = "/your.path/ed1_atac/outs/filtered_peak_bc_matrix.h5")
+
+e1meta <- read.csv(
+  file = "/your.path/ed1_atac/outs/singlecell.csv",
+  header = TRUE,
+  row.names = 1
+  )
+
+#Chromatin assay
+e1chromAssay <- CreateChromatinAssay(
+  counts = e1counts,
+  sep = c(":", "-"),
+  fragments = "/maps/projects/renlab/people/gcn259/placenta/ed1_atac/outs/fragments.tsv.gz",
+  min.cells = 10,
+  min.features = 200
+)
+
+# create seurat object
+e1obj <- CreateSeuratObject(
+  counts = e1chromAssay,
+  assay = "peaks",
+  meta.data = e1meta
+)
+```
+
+Repeat for all donors untill the following objects are created:
+```{r}
+# early:
+e1obj
+e2obj
+e3obj
+e4obj
+e5obj
+e6obj
+
+# term:
+t1obj
+t2obj
+t3obj
+t4obj
+t5obj
+t6obj
+```
+
+
+# Add annotaitons:
+```{r}
+
+add_gtf_annotations <- function(
+  seu,
+  gtf_path = "/your.path/cellranger/refdata-cellranger-arc-GRCh38-2020-A-2.0.0/genes/genes.gtf.gz"
+) {
+  gtf <- rtracklayer::import(gtf_path)
+  genes <- gtf[gtf$type == "gene"]
+  mc <- mcols(genes)
+
+  # gene_id is required
+  if (!"gene_id" %in% names(mc)) {
+    stop("GTF must contain a 'gene_id' attribute.")
+  }
+
+  # gene_name fallback
+  if (!"gene_name" %in% names(mc)) {
+    genes$gene_name <- if ("gene" %in% names(mc)) mc$gene else mc$gene_id
+  }
+
+  # gene_biotype fallback
+  mc <- mcols(genes)
+  if (!"gene_biotype" %in% names(mc)) {
+    genes$gene_biotype <- if ("gene_type" %in% names(mc)) mc$gene_type else NA_character_
+  }
+
+  # UCSC-style chromosomes and genome
+  seqlevels(genes) <- paste0("chr", sub("^chr", "", seqlevels(genes)))
+  genome(genes) <- "hg38"
+
+  Annotation(seu) <- genes
+  seu
+}
+
+
+```
+
+
+## Apply funciton to each donor
+
+```{r}
+e6obj <- add_gtf_annotations(e6obj)
+e5obj <- add_gtf_annotations(e5obj)
+e4obj <- add_gtf_annotations(e4obj)
+e3obj <- add_gtf_annotations(e3obj)
+e2obj <- add_gtf_annotations(e2obj)
+e1obj <- add_gtf_annotations(e1obj)
+
+
+t6obj <- add_gtf_annotations(t6obj)
+t5obj <- add_gtf_annotations(t5obj)
+t4obj <- add_gtf_annotations(t4obj)
+t3obj <- add_gtf_annotations(t3obj)
+t2obj <- add_gtf_annotations(t2obj)
+t1obj <- add_gtf_annotations(t1obj)
+```
+
+## QC-Filtering
+
+```{r}
+qc_filter_atac <- function(
+  obj,
+  sample_id        = NULL,
+  min_fragments    = 5000,   
+  max_fragments    = 60000,
+  min_frip         = 40,     
+  min_tss          = 2,
+  max_blacklist    = 0.05,   
+  max_nucleosome   = 2
+) {
+
+  if (is.null(sample_id)) {
+    sample_id <- obj@project.name
+  }
+
+  # keep standard chromosomes only
+  gr <- granges(obj)
+  keep <- as.character(seqnames(gr)) %in% standardChromosomes(gr)
+  obj <- obj[keep, ]
+
+  # add sample_id
+  obj$sample_id <- sample_id
+
+  #ensure passed_filters exists
+  if (!"passed_filters" %in% colnames(obj@meta.data)) {
+    stop("Column 'passed_filters' not found.")
+  }
+
+  #FRiP (% reads in peaks)
+  if (!"pct_reads_in_peaks" %in% colnames(obj@meta.data)) {
+    denom <- obj$passed_filters
+    obj$pct_reads_in_peaks <- ifelse(denom > 0, obj$peak_region_fragments / denom * 100, NA_real_)
+  }
+
+  # blacklist ratio
+  if (!"blacklist_ratio" %in% colnames(obj@meta.data)) {
+    denom <- obj$passed_filters
+    obj$blacklist_ratio <- ifelse(denom > 0, obj$blacklist_region_fragments / denom, NA_real_)
+  }
+
+  # nucleosome signal
+  if (!"nucleosome_signal" %in% colnames(obj@meta.data)) {
+    obj <- NucleosomeSignal(obj)
+  }
+
+  # TSS enrichment
+  if (!"TSS.enrichment" %in% colnames(obj@meta.data)) {
+    obj <- TSSEnrichment(obj)
+  }
+
+  # check that is__cell_barcode exists
+  if (!"is__cell_barcode" %in% colnames(obj@meta.data)) {
+    obj$is__cell_barcode <- TRUE
+  }
+
+  # filter cells 
+  obj_filt <- subset(
+    obj,
+    subset =
+      passed_filters       > min_fragments &
+      passed_filters       < max_fragments &
+      pct_reads_in_peaks   > min_frip &
+      TSS.enrichment       > min_tss &
+      blacklist_ratio      < max_blacklist &
+      nucleosome_signal    < max_nucleosome &
+      is__cell_barcode == TRUE
+  )
+
+  return(obj_filt)
+}
+
+```
+
+
+## Apply filtering
+```{r}
+e1_filt1 <- qc_filter_atac(e1obj, sample_id = "ed1")
+e2_filt1 <- qc_filter_atac(e2obj, sample_id = "ed2")
+e3_filt1 <- qc_filter_atac(e3obj, sample_id = "ed3")
+e4_filt1 <- qc_filter_atac(e4obj, sample_id = "ed4")
+e5_filt1 <- qc_filter_atac(e5obj, sample_id = "ed5")
+e6_filt1 <- qc_filter_atac(e6obj, sample_id = "ed6")
+
+t1_filt1 <- qc_filter_atac(t1obj, sample_id = "td1")
+t2_filt1 <- qc_filter_atac(t2obj, sample_id = "td2")
+t3_filt1 <- qc_filter_atac(t3obj, sample_id = "td3")
+t4_filt1 <- qc_filter_atac(t4obj, sample_id = "td4")
+t5_filt1 <- qc_filter_atac(t5obj, sample_id = "td5")
+t6_filt1 <- qc_filter_atac(t6obj, sample_id = "td6")
+
+```
+
+## list all donors
+```{r}
+donsf1 <- list(ed1 = e1_filt1,
+             ed2 = e2_filt1,
+             ed3 = e3_filt1,
+             ed4 = e4_filt1,
+             ed5 = e5_filt1,
+             ed6 = e6_filt1,
+             td1 = t1_filt1,
+             td2 = t2_filt1,
+             td3 = t3_filt1,
+             td4 = t4_filt1,
+             td5 = t5_filt1,
+             td6 = t6_filt1
+             )
+
+```
+
+
+## Shared peaks
+```{r}
+alldonsf1 <- donsf1
+
+all_peaks <- Reduce(c, lapply(alldonsf1, granges))
+
+std <- standardChromosomes(all_peaks)
+all_peaks_std <- keepSeqlevels(all_peaks, std, pruning.mode = "coarse")
+
+un_peaks <- GenomicRanges::reduce(all_peaks_std)
+
+```
+
+## Recount each donor on the union peaks
+```{r}
+objs1_union <- lapply(alldonsf1, function(o) {
+  counts <- FeatureMatrix(
+    fragments = Fragments(o),
+    features  = un_peaks,
+    cells     = colnames(o)
+  )
+
+  o[["peaks_un"]] <- CreateChromatinAssay(
+    counts    = counts,
+    fragments = Fragments(o),
+    ranges    = un_peaks
+  )
+
+  DefaultAssay(o) <- "peaks_un"
+  o
+})
+
+```
+
+## Merge donors
+```{r}
+mergedf1 <- merge(
+  x = objs1_union[[1]],
+  y = objs1_union[-1],
+  add.cell.ids = names(objs1_union)
+)
+DefaultAssay(mergedf1) <- "peaks_un"
+
+DefaultAssay(mergedf1) <- "peaks_un"
+
+mergedf1 <- FindTopFeatures(mergedf1, min.cutoff = 10)
+mergedf1 <- RunTFIDF(mergedf1)
+mergedf1 <- RunSVD(mergedf1, n=100) 
+
+```
+
+Split by sample_id to integrate
+```{r}
+intgf1 <- SplitObject(mergedf1, split.by = "sample_id")
+
+intgf1 <- lapply(intgf1, function(x) {
+  DefaultAssay(x) <- "peaks_un"
+  x <- FindTopFeatures(x, min.cutoff = 10)
+  x <- RunTFIDF(x)
+  x <- RunSVD(x, n = 100)
+  x
+})
+```
+
+Elbow Plot
+```{r}
+ElbowPlot(mergedf1, reduction = "lsi", ndims = 75)
+```
+
+## Integration with lsi 2:30
+```{r}
+anchorsf1 <- FindIntegrationAnchors(
+  object.list     = intgf1,
+  anchor.features = rownames(mergedf1),
+  reduction       = "rlsi",
+  dims            = 2:30
+)
+
+integ <- IntegrateEmbeddings(
+  anchorset          = anchorsf1,
+  reductions         = mergedf1[["lsi"]],      
+  new.reduction.name = "integrated_lsif30",
+  dims.to.integrate  = 2:30  # excluding 1st component
+)
+
+integ <- RunUMAP(
+  integ,
+  reduction = "integrated_lsif30",
+  dims = 1:29,
+  reduction.name = "umap_30"
+)
+
+integ <- FindNeighbors(integ, reduction = "integrated_lsif30", dims = 1:29)
+integ <- FindClusters(integ, resolution = 0.6)
+
+```
+
+
+Correlation Plot
+```{r}
+DepthCor(integ, reduction = "integrated_lsif30", n = 30)
+
+```
+
+Plot UMAP, colored by clusters:
+```{r}
+clust30 <- DimPlot(
+  integ,
+  reduction = "umap_30",
+  group.by = "seurat_clusters",
+  label = TRUE,
+  repel = TRUE
+) 
+
+clust30
+```
+
+UMAP, colored by pregnancy stage
+```{r}
+# add stage:
+ integ$stage <- ifelse(grepl("^e", integ$sample_id), "early",
+                         ifelse(grepl("^t", integ$sample_id), "term", NA))
+integ$stage <- factor(integ$stage, levels = c("early", "term"))
+
+st30 <- DimPlot(
+  integ,
+  reduction = "umap_30",
+  group.by = "stage",
+  label = FALSE,
+  repel = FALSE, alpha = 0.5
+) +
+  facet_wrap(~stage)
+st30
+```
+
+UMAP colored by sample_id
+```{r}
+id30 <- DimPlot(
+  integ,
+  reduction = "umap_30",
+  group.by = "sample_id",
+  label = TRUE,
+  repel = TRUE, alpha = 0.5
+) 
+
+id30
+```
+
+save integrated object
+```{r}
+saveRDS(integ, "/your.path/integ30.rds")
+```
+
