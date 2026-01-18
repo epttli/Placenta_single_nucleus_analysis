@@ -11,7 +11,7 @@ interaction inference using scE2G.
 - `download_pileup_raw_data/`  
   Example bash scripts illustrating how raw snATAC-seq data were downloaded from
   GEO and processed using Cell Ranger ATAC.  
-  These scripts are provided for documentation and reproducibility purposes only.
+  These scripts are provided for documentation and reproducibility purposes.
   
 - `snATAC_integration.Rmd`  
   R Markdown notebook for loading, QC filtering, donor integration, dimensionality
