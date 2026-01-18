@@ -1,5 +1,5 @@
 ---
-title: "snATAC-seq loading and per-donor setup"
+title: "snATAC-seq donors integration"
 output: html_document
 ---
 
