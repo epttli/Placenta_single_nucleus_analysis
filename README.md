@@ -2,12 +2,17 @@
 
 This repository contains code used to preprocess and integrate human placental
 single-nucleus ATAC-seq (snATAC-seq) data from early and term pregnancy, and to
-transfer cell type labels from a paired multiome (snRNA–snATAC) reference dataset.
+transfer cell type labels from an snRNA-seq reference dataset.
 The resulting objects are intended as inputs for downstream enhancer–gene
 interaction inference using scE2G.
 
 ## Repository structure
 
+- `download_pileup_raw_data/`  
+  Example bash scripts illustrating how raw snATAC-seq data were downloaded from
+  GEO and processed using Cell Ranger ATAC.  
+  These scripts are provided for documentation and reproducibility purposes only.
+  
 - `snATAC_integration.Rmd`  
   R Markdown notebook for loading, QC filtering, donor integration, dimensionality
   testing, UMAP visualization, and saving the integrated snATAC-seq object.
@@ -22,10 +27,7 @@ interaction inference using scE2G.
   transferring cell type labels from the snRNA-seq reference to the integrated
   snATAC-seq dataset.
 
-- `download_pileup_raw_data/`  
-  Example bash scripts illustrating how raw snATAC-seq data were downloaded from
-  GEO and processed using Cell Ranger ATAC.  
-  These scripts are provided for documentation and reproducibility purposes only.
+
 
 ## Data availability
 
