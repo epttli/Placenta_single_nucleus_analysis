@@ -3,7 +3,7 @@
 This repository contains code used to preprocess and integrate human placental
 single-nucleus ATAC-seq (snATAC-seq) data from early and term pregnancy, and to
 transfer cell type labels from an snRNA-seq reference dataset.
-The resulting objects are intended as inputs for downstream enhancer–gene
+The resulting objects are intended as inputs for downstream enhancer-gene
 interaction inference using scE2G.
 
 ## Repository structure
