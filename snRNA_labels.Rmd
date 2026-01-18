@@ -157,5 +157,5 @@ DimPlot(rna, group.by = "celltype", label = TRUE, repel = TRUE) + NoLegend()
 
 ```{r}
 # save object
-saveRDS(rna, OUT_RRS)
+saveRDS(rna, out.rds)
 ```
