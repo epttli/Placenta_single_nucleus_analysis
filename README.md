@@ -1,25 +1,27 @@
 # Placenta snATAC preprocessing for scE2G
 
-This repository contains code used to preprocess and integrate placental snATAC-seq (early + term donors) and transfer cell type labels from a paired multiome reference, to generate inputs for scE2G.
+This repository contains code used to preprocess and integrate human placental snATAC-seq data from early and term pregnancy, and to transfer cell type labels from a paired multiome reference, in order to generate inputs for scE2G.
 
-## Contents
-- `code/` R Markdown notebooks for each analysis step
-- `data/` instructions for obtaining public datasets (no raw data stored here)
-- `results/` optional outputs/figures
+## Repository contents
+- `code/`  
+  R Markdown notebooks for each analysis step (QC, integration, dimensionality testing, label transfer).
+- `scripts/`  
+  Example bash scripts showing how raw snATAC-seq data were downloaded and processed using Cell Ranger ATAC.
+- `results/`  
+  Optional output figures generated during analysis.
 
-## Data
-Raw snATAC-seq: GEO GSE247038 (Cell Ranger ATAC processed per donor)  
-Multiome reference: SCP2601 (Single Cell Portal)
+## Data availability
+- Raw snATAC-seq data: GEO accession **GSE247038**
+- Paired snRNA-seq/snATAC-seq multiome reference: Single Cell Portal accession **SCP2601**
 
-See `data/README.md` for download notes and expected file structure.
+Raw sequencing files, Cell Ranger outputs, and reference files are not included in this repository.
 
 ## How to run
-1. Install required R packages (Seurat, Signac, etc.)
-2. Run notebooks in `code/` in order:
-   - `01_...Rmd`
-   - `02_...Rmd`
-   - ...
+1. Install required R packages (e.g. Seurat, Signac).
+2. Download the data from the sources listed above.
+3. Update file paths in the scripts and notebooks as needed.
+4. Run the R Markdown notebooks in `code/` in order.
 
 ## Notes
-- Large files (FASTQs, fragments, matrices) are not tracked in this repo.
-- Set file paths at the top of each notebook.
+- Large files (FASTQs, fragment files, matrices, references) are intentionally excluded.
+- File paths are defined explicitly in each script/notebook and should be adapted to the local environment.
