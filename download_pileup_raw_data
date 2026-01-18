@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+
+# Example workflow: snATAC-seq preprocessing for one donor (ed1)
+# Data source: GEO GSE247038
+# This script shows how raw SRA files were downloaded, converted to FASTQ,
+# concatenated, and processed using Cell Ranger ATAC.
+#
+# NOTE:
+# - Raw data are NOT included in this repository.
+
+
+# Load required modules
+
+module load sratoolkit/3.0.0
+module load cellranger-atac/2.0.0
+
+# Download Cell Ranger ATAC/ARC reference
+# Reference: refdata-cellranger-arc-GRCh38-2020-A-2.0.0
+# Source: 10x Genomics
+
+mkdir -p references
+cd references
+
+wget -O refdata-cellranger-arc-GRCh38-2020-A-2.0.0.tar.gz \
+  https://cf.10xgenomics.com/supp/cell-exp/refdata-cellranger-arc-GRCh38-2020-A-2.0.0.tar.gz
+
+tar -xvzf refdata-cellranger-arc-GRCh38-2020-A-2.0.0.tar.gz
+rm refdata-cellranger-arc-GRCh38-2020-A-2.0.0.tar.gz
+
+cd ..
+
+
+# Download SRA files
+
+# Example donor: ed1
+# SRA run accessions for this donor
+prefetch SRR26674052
+prefetch SRR26674053
+prefetch SRR26674054
+prefetch SRR26674055
+
+
+# Convert SRA to FASTQ
+
+mkdir -p fastq
+
+fastq-dump SRR26674052/SRR26674052.sra --split-files -O fastq
+fastq-dump SRR26674053/SRR26674053.sra --split-files -O fastq
+fastq-dump SRR26674054/SRR26674054.sra --split-files -O fastq
+fastq-dump SRR26674055/SRR26674055.sra --split-files -O fastq
+
+
+# Concatenate FASTQs
+
+# SRA split outputs were mapped to 10x ATAC FASTQ naming
+
+DONOR_FASTQ_DIR="/path/to/donor1_eATAC"
+mkdir -p "${DONOR_FASTQ_DIR}"
+
+# I1: sample index
+cat fastq/*_1.fastq | gzip > "${DONOR_FASTQ_DIR}/ed1_S1_L001_I1_001.fastq.gz"
+
+# R1: cell barcode
+cat fastq/*_2.fastq | gzip > "${DONOR_FASTQ_DIR}/ed1_S1_L001_R1_001.fastq.gz"
+
+# I2: ATAC index
+cat fastq/*_3.fastq | gzip > "${DONOR_FASTQ_DIR}/ed1_S1_L001_I2_001.fastq.gz"
+
+# R2: ATAC read
+cat fastq/*_4.fastq | gzip > "${DONOR_FASTQ_DIR}/ed1_S1_L001_R2_001.fastq.gz"
+
+
+# Run Cell Ranger ATAC
+
+REFDIR="/path/to/refdata-cellranger-arc-GRCh38-2020-A-2.0.0"
+
+cellranger-atac count \
+  --id=ed1_atac \
+  --reference="${REFDIR}" \
+  --fastqs="${DONOR_FASTQ_DIR}" \
+  --sample=ed1 \
+  --localcores=8 \
+  --localmem=64
