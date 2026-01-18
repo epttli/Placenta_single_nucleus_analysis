@@ -1,0 +1,161 @@
+---
+title: "Multiome snRNA reference preprocessing (for label transfer)"
+output: html_document
+
+---
+
+## Load Libraries
+
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(Seurat)
+library(Matrix)
+library(dplyr)
+library(ggplot2)
+```
+
+# Purpose: 
+This notebook preprocesses the snRNA-seq data of a paired multiome dataset and attaches cell type labels from the metadata.
+The resulting Seurat object will be used as the RNA reference for label transfer to snATAC-seq
+
+## Input paths
+## Folder containing 10X output: barcodes.tsv(.gz), features.tsv(.gz), matrix.mtx(.gz)
+```{r}
+RNA_DIR <- "/home/gcn259/bioinf_project/RNAfiles/"
+
+# Metadata table from the multiome study (CSV)
+
+META_PATH <- "/home/gcn259/bioinf_project/multiome_metadata.csv"
+
+dir.exists(RNA_DIR)
+file.exists(META_PATH)
+
+```
+
+## Read counts and create Seurat object:
+```{r}
+rna_counts <- Read10X(data.dir = RNA_DIR)
+
+rna <- CreateSeuratObject(
+counts = rna_counts,
+assay = "RNA",
+project = "placenta_multiome_rna",
+min.cells = 3,
+min.features = 200
+)
+
+rna
+```
+
+## QC
+```{r}
+# Human mitochondrial genes usually start with "MT-"
+
+rna[["percent.mt"]] <- PercentageFeatureSet(rna, pattern = "^MT-")
+
+```
+
+Violin Plot
+```{r}
+VlnPlot(rna, features = c("nCount_RNA", "nFeature_RNA", "percent.mt"), ncol = 3)
+
+```
+
+# Filter cells
+```{r}
+rna <- subset(
+rna,
+subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 20
+)
+
+```
+
+## Normalize & select features
+```{r}
+rna <- NormalizeData(
+rna,
+normalization.method = "LogNormalize",
+scale.factor = 1e4,
+verbose = FALSE
+)
+
+rna <- FindVariableFeatures(
+rna,
+selection.method = "vst",
+nfeatures = 2000,
+verbose = FALSE
+)
+
+```
+
+
+## Scalling, PCA, clustering, UMAP
+scale+PCA
+```{r}
+rna <- ScaleData(rna, features = rownames(rna), verbose = FALSE)
+
+rna <- RunPCA(
+rna,
+features = VariableFeatures(rna),
+npcs = 50,
+verbose = FALSE,
+seed.use = 1
+)
+
+ElbowPlot(rna, ndims = 50)
+
+```
+
+
+```{r}
+pcs_use <- 15 # according to elbow plot
+rna <- FindClusters(rna, resolution = 0.3, verbose = FALSE, random.seed = 0)
+
+rna <- RunUMAP(rna, dims = 1, verbose = FALSE, seed.use = 42)
+
+DimPlot(rna, reduction = "umap", label = TRUE) + NoLegend()
+```
+
+## Attach cell type metadata
+```{r}
+metadata <- read.csv(META_PATH, header = TRUE)
+
+# remove the "TYPE" row if present
+
+metadata <- metadata[metadata$NAME != "TYPE", ]
+
+# set rownames as cell barcodes
+
+metadata$NAME <- as.character(metadata$NAME)
+rownames(metadata) <- metadata$NAME
+
+# ensure labels are character
+
+metadata$cluster <- as.character(metadata$cluster)
+
+```
+
+Map metadata labels onto Seurat cells
+```{r}
+common <- intersect(colnames(rna), rownames(metadata))
+
+rna$celltype <- NA_character_
+rna$celltype[common] <- metadata[common, "cluster"]
+
+c(total_rna_cells = ncol(rna), labeled = length(common))
+table(is.na(rna$celltype))
+
+```
+
+
+## Visualize labels on UMAP
+```{r}
+DimPlot(rna, group.by = "celltype", label = TRUE, repel = TRUE) + NoLegend()
+```
+
+
+```{r}
+# save object
+saveRDS(rna, OUT_RRS)
+```
