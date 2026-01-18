@@ -1,0 +1,19 @@
+# Raw data
+fastq/
+references/
+
+# Sequencing files
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+
+# R / RStudio
+.Rhistory
+.RData
+.Rproj.user/
+
+# Large objects
+*.rds
+*.h5
+*.h5seurat
